@@ -2178,7 +2178,7 @@ async fn run_client_loop(
                                 })
                             })
                             .flatten();
-                        install_client_shell_snapshot(
+                        let pin_actions = install_client_shell_snapshot(
                             &mut state,
                             &endpoint_id,
                             snapshot,
@@ -2186,6 +2186,16 @@ async fn run_client_loop(
                             &mut write_stream,
                             &mut prefix_input_source,
                         )?;
+                        if !pin_actions.is_empty() {
+                            dispatch_client_shell_actions(
+                                pin_actions,
+                                &mut endpoint_commands,
+                                &mut write_stream,
+                                state.shell.as_mut(),
+                                &mut state.detached_process_children,
+                                &mut scheduled_activation,
+                            )?;
+                        }
                         if matches!(
                             activation_progress,
                             Some(endpoint::SurfaceActivationProgress::Ready)

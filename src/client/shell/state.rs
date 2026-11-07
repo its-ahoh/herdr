@@ -516,6 +516,7 @@ pub(super) enum ClientContextMenuAction {
     OpenWorktree,
     RemoveWorktree,
     ToggleGroup,
+    TogglePin,
     NewTab,
     RenamePane,
     ClearPaneName,
@@ -536,6 +537,7 @@ pub(super) enum ClientContextMenuTarget {
         has_worktree_children: bool,
         close_group: bool,
         collapsed: bool,
+        pinned: bool,
     },
     Tab {
         tab_id: String,
@@ -882,6 +884,12 @@ pub(crate) struct ClientShellState {
     pub(super) tab_press: Option<ClientTabPress>,
     pub(super) collapsed_groups: HashSet<String>,
     pub(super) remote_collapsed_groups: HashMap<ClientEndpointId, HashSet<String>>,
+    pub(super) pinned_workspaces: HashSet<String>,
+    pub(super) remote_pinned_workspaces: HashMap<ClientEndpointId, HashSet<String>>,
+    /// Root workspace orders a pinned-block repair move was already sent for.
+    /// Each wrong order is repaired at most once until the pins themselves
+    /// change, so clients with different pins cannot keep undoing each other.
+    pub(super) pinned_repaired_orders: HashSet<Vec<String>>,
     pub(super) workspace_scroll: usize,
     pub(super) agent_scroll: usize,
     pub(super) pending_agent_reveal: Option<(ClientEndpointId, String)>,
@@ -1029,6 +1037,16 @@ impl ClientShellState {
                 .or_default()
                 .extend(saved.collapsed_groups);
         }
+        let mut remote_pinned_workspaces = HashMap::<ClientEndpointId, HashSet<String>>::new();
+        for saved in preferences.remote_pinned_workspaces {
+            let Ok(profile_id) = crate::client::endpoint::ProfileId::parse(saved.profile_id) else {
+                continue;
+            };
+            remote_pinned_workspaces
+                .entry(ClientEndpointId::Ssh(profile_id))
+                .or_default()
+                .extend(saved.workspace_ids);
+        }
         Self {
             machine_diagnostics: Default::default(),
             config,
@@ -1056,6 +1074,9 @@ impl ClientShellState {
             tab_press: None,
             collapsed_groups: preferences.collapsed_groups.into_iter().collect(),
             remote_collapsed_groups,
+            pinned_workspaces: preferences.pinned_workspaces.into_iter().collect(),
+            remote_pinned_workspaces,
+            pinned_repaired_orders: HashSet::new(),
             workspace_scroll: 0,
             agent_scroll: 0,
             pending_agent_reveal: None,

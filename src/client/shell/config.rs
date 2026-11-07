@@ -48,6 +48,24 @@ impl ClientShellState {
             })
             .collect::<Vec<_>>();
         remote_collapsed_groups.sort_by(|left, right| left.profile_id.cmp(&right.profile_id));
+        let mut pinned_workspaces = self.pinned_workspaces.iter().cloned().collect::<Vec<_>>();
+        pinned_workspaces.sort();
+        let mut remote_pinned_workspaces = self
+            .remote_pinned_workspaces
+            .iter()
+            .filter_map(|(endpoint_id, pinned)| {
+                let ClientEndpointId::Ssh(profile_id) = endpoint_id else {
+                    return None;
+                };
+                let mut workspace_ids = pinned.iter().cloned().collect::<Vec<_>>();
+                workspace_ids.sort();
+                (!workspace_ids.is_empty()).then(|| preferences::ClientRemotePinnedWorkspaces {
+                    profile_id: profile_id.to_string(),
+                    workspace_ids,
+                })
+            })
+            .collect::<Vec<_>>();
+        remote_pinned_workspaces.sort_by(|left, right| left.profile_id.cmp(&right.profile_id));
         let preferences = preferences::ClientChromePreferences {
             sidebar_width: self.sidebar_width_manual.then_some(self.sidebar_width),
             sidebar_section_split: self
@@ -61,6 +79,8 @@ impl ClientShellState {
                 .then_some(self.config.agent_panel_sort),
             collapsed_groups,
             remote_collapsed_groups,
+            pinned_workspaces,
+            remote_pinned_workspaces,
         };
         if let Err(error) = preferences::store(path, preferences) {
             self.set_endpoint_error(error);
