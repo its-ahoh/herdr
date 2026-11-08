@@ -7,7 +7,11 @@ impl ClientContextMenuOverlay {
         let item = |label, action| ClientContextMenuItem { label, action };
         match &self.target {
             ClientContextMenuTarget::Workspace { is_git: false, .. } => {
-                vec![item("Rename", Action::Rename), item("Close", Action::Close)]
+                vec![
+                    item("Rename", Action::Rename),
+                    item("Move to top", Action::MoveToTop),
+                    item("Close", Action::Close),
+                ]
             }
             ClientContextMenuTarget::Workspace {
                 is_linked_worktree: false,
@@ -15,6 +19,7 @@ impl ClientContextMenuOverlay {
                 ..
             } => vec![
                 item("Rename", Action::Rename),
+                item("Move to top", Action::MoveToTop),
                 item("Close", Action::Close),
                 item("New worktree", Action::NewWorktree),
                 item("Open worktree...", Action::OpenWorktree),
@@ -34,6 +39,7 @@ impl ClientContextMenuOverlay {
                 ..
             } => vec![
                 item("Rename", Action::Rename),
+                item("Move to top", Action::MoveToTop),
                 item(
                     if *close_group { "Close group" } else { "Close" },
                     Action::Close,
@@ -121,6 +127,29 @@ impl ClientShellState {
             y,
             highlighted: 0,
         }));
+    }
+
+    /// The `workspace.move` request that puts a root workspace (with its linked
+    /// worktrees) first in the sidebar, or `None` if it is already first.
+    fn move_workspace_to_top_method(
+        &self,
+        workspace_id: &str,
+    ) -> Option<crate::api::schema::Method> {
+        let first = self
+            .snapshot
+            .as_deref()?
+            .workspaces
+            .iter()
+            .find(|workspace| {
+                !workspace
+                    .worktree
+                    .as_ref()
+                    .is_some_and(|worktree| worktree.is_linked_worktree)
+            })?;
+        if first.workspace_id == workspace_id {
+            return None;
+        }
+        self.workspace_move_method(workspace_id, Some(&first.workspace_id))
     }
 
     pub(super) fn open_tab_context_menu(&mut self, tab_id: String, x: u16, y: u16) {
@@ -250,6 +279,11 @@ impl ClientShellState {
             }
             ClientContextMenuAction::Close => {
                 self.request_workspace_close(workspace_id, Some(close_group), outcome);
+            }
+            ClientContextMenuAction::MoveToTop => {
+                if let Some(method) = self.move_workspace_to_top_method(&workspace_id) {
+                    self.push_endpoint_method(method, outcome);
+                }
             }
             ClientContextMenuAction::NewWorktree => {
                 self.begin_worktree_action_for(KeybindAction::NewWorktree, workspace_id, outcome)

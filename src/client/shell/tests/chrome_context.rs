@@ -527,3 +527,59 @@ fn close_confirmation_error_becomes_client_owned_overlay_and_stable_workspace_cl
             if params.workspace_id == "ws_1" && !params.close_group
     ));
 }
+
+fn state_with_root_workspaces(ids: &[&str]) -> ClientShellState {
+    let mut projected = snapshot();
+    let template = projected.workspaces[0].clone();
+    projected.workspaces = ids
+        .iter()
+        .enumerate()
+        .map(|(index, id)| ClientShellWorkspace {
+            workspace_id: (*id).to_owned(),
+            number: index + 1,
+            label: (*id).to_owned(),
+            focused: index == 0,
+            ..template.clone()
+        })
+        .collect();
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    state.set_snapshot(Box::new(projected));
+    state
+}
+
+fn activate_move_to_top(state: &mut ClientShellState, workspace_id: &str) -> ClientShellInput {
+    state.open_workspace_context_menu(workspace_id.into(), 0, 0);
+    let index = match state.overlay.as_ref() {
+        Some(ClientShellOverlay::ContextMenu(menu)) => menu
+            .items()
+            .iter()
+            .position(|item| item.action == ClientContextMenuAction::MoveToTop)
+            .expect("move to top item"),
+        _ => panic!("workspace context menu"),
+    };
+    let mut outcome = ClientShellInput::default();
+    state.activate_context_menu_item(index, &mut outcome);
+    outcome
+}
+
+#[test]
+fn move_to_top_sends_workspace_move_to_index_zero() {
+    let mut state = state_with_root_workspaces(&["ws_1", "ws_2", "ws_3"]);
+    let outcome = activate_move_to_top(&mut state, "ws_3");
+    let [ClientShellAction::Endpoint { request, .. }] = &outcome.actions[..] else {
+        panic!("move to top should send one endpoint request");
+    };
+    assert!(matches!(
+        &request.method,
+        crate::api::schema::Method::WorkspaceMove(params)
+            if params.workspace_id == "ws_3" && params.insert_index == 0
+    ));
+    assert!(state.overlay.is_none());
+}
+
+#[test]
+fn move_to_top_on_first_workspace_sends_nothing() {
+    let mut state = state_with_root_workspaces(&["ws_1", "ws_2"]);
+    let outcome = activate_move_to_top(&mut state, "ws_1");
+    assert!(outcome.actions.is_empty());
+}

@@ -516,6 +516,7 @@ pub(super) enum ClientContextMenuAction {
     OpenWorktree,
     RemoveWorktree,
     ToggleGroup,
+    MoveToTop,
     NewTab,
     RenamePane,
     ClearPaneName,
