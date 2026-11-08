@@ -59,7 +59,7 @@ fn workspace_marker(
 }
 
 #[test]
-fn pin_and_unpin_preserve_the_pinned_block_order() {
+fn new_pins_go_to_the_top_and_unpins_go_below_the_pinned_block() {
     let mut state = state_with_workspaces(&["ws_1", "ws_2", "ws_3"]);
     let mut outcome = ClientShellInput::default();
 
@@ -75,8 +75,8 @@ fn pin_and_unpin_preserve_the_pinned_block_order() {
             )
     ));
 
-    // Apply the server's reordered snapshot, then pin another workspace. It is
-    // inserted after the existing pinned workspace rather than ahead of it.
+    // Apply the server's reordered snapshot, then pin another workspace. The
+    // newest pin goes to the very top, ahead of the existing pinned workspace.
     state = state_with_workspaces(&["ws_2", "ws_1", "ws_3"]);
     state.pinned_workspaces.insert("ws_2".into());
     outcome = ClientShellInput::default();
@@ -91,24 +91,24 @@ fn pin_and_unpin_preserve_the_pinned_block_order() {
             if matches!(
                 &request.method,
                 crate::api::schema::Method::WorkspaceMove(params)
-                    if params.workspace_id == "ws_3" && params.insert_index == 1
+                    if params.workspace_id == "ws_3" && params.insert_index == 0
             )
     ));
 
     // Once the server reflects that move, unpinning the first workspace places
     // it at the start of the unpinned block, after the remaining pin.
-    state = state_with_workspaces(&["ws_2", "ws_3", "ws_1"]);
+    state = state_with_workspaces(&["ws_3", "ws_2", "ws_1"]);
     state.pinned_workspaces = HashSet::from(["ws_2".to_owned(), "ws_3".to_owned()]);
     outcome = ClientShellInput::default();
-    state.toggle_workspace_pin("ws_2".into(), &mut outcome);
-    assert_eq!(state.pinned_workspaces, HashSet::from(["ws_3".to_owned()]));
+    state.toggle_workspace_pin("ws_3".into(), &mut outcome);
+    assert_eq!(state.pinned_workspaces, HashSet::from(["ws_2".to_owned()]));
     assert!(matches!(
         &outcome.actions[..],
         [ClientShellAction::Endpoint { request, .. }]
             if matches!(
                 &request.method,
                 crate::api::schema::Method::WorkspaceMove(params)
-                    if params.workspace_id == "ws_2" && params.insert_index == 2
+                    if params.workspace_id == "ws_3" && params.insert_index == 2
             )
     ));
 }

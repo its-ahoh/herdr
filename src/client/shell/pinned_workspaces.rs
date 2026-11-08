@@ -62,9 +62,9 @@ impl ClientShellState {
             .map(|workspace| workspace.workspace_id.clone())
     }
 
-    /// Pins or unpins a workspace on the active endpoint and moves it to the
-    /// boundary between pinned and unpinned workspaces: the bottom of the pinned
-    /// block when pinning, the top of the unpinned workspaces when unpinning.
+    /// Pins or unpins a workspace on the active endpoint. A new pin moves to
+    /// the very top of the sidebar; an unpinned workspace moves to the top of
+    /// the unpinned workspaces, just below the pinned block.
     pub(super) fn toggle_workspace_pin(
         &mut self,
         workspace_id: String,
@@ -72,12 +72,19 @@ impl ClientShellState {
     ) {
         let endpoint_id = self.active_endpoint_id.clone();
         let pinned = self.pinned_workspaces_for_endpoint_mut(&endpoint_id);
-        if !pinned.remove(&workspace_id) {
+        let now_pinned = !pinned.remove(&workspace_id);
+        if now_pinned {
             pinned.insert(workspace_id.clone());
         }
         self.pinned_repaired_orders.clear();
         self.prune_pinned_workspaces();
-        let before = self.first_unpinned_root_workspace(&workspace_id);
+        let before = if now_pinned {
+            self.root_workspace_order()
+                .into_iter()
+                .find(|id| id != &workspace_id)
+        } else {
+            self.first_unpinned_root_workspace(&workspace_id)
+        };
         if let Some(method) = self.workspace_move_method(&workspace_id, before.as_deref()) {
             self.push_endpoint_method(method, outcome);
             // This move already restores the pinned block; snapshots that still
