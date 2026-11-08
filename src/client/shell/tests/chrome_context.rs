@@ -324,6 +324,9 @@ fn context_menus_capture_stable_targets_and_route_actions() {
     assert!(workspace_items
         .iter()
         .any(|item| item.action == ClientContextMenuAction::NewWorktree));
+    assert!(workspace_items.iter().any(|item| {
+        item.label == "Pin to top" && item.action == ClientContextMenuAction::TogglePin
+    }));
     state.compose(106, 20).expect("workspace context menu");
     let rename = state.hits.context_menu_rows[0].0;
     state.handle_raw_events(vec![RawInputEvent::Mouse(crossterm::event::MouseEvent {

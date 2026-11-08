@@ -257,7 +257,12 @@ fn duplicate_repo_parents_remain_visible_and_focusable_when_collapsed() {
             let Some(ClientShellOverlay::ContextMenu(menu)) = state.overlay.as_ref() else {
                 panic!("repository workspace context menu");
             };
-            assert_eq!(menu.items()[1].label, "Close");
+            let close_index = menu
+                .items()
+                .iter()
+                .position(|item| item.action == ClientContextMenuAction::Close)
+                .expect("workspace close action");
+            assert_eq!(menu.items()[close_index].label, "Close");
             assert_eq!(
                 menu.items()
                     .iter()
@@ -273,7 +278,7 @@ fn duplicate_repo_parents_remain_visible_and_focusable_when_collapsed() {
                 state.set_snapshot(Box::new(replacement));
             }
             let mut close = ClientShellInput::default();
-            state.activate_context_menu_item(1, &mut close);
+            state.activate_context_menu_item(close_index, &mut close);
             if confirm_close {
                 assert!(close.actions.is_empty());
                 assert!(matches!(state.overlay.as_ref(),

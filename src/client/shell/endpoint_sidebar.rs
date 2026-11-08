@@ -12,6 +12,17 @@ fn collapsed_groups_for_endpoint<'a>(
     }
 }
 
+fn pinned_workspaces_for_endpoint<'a>(
+    state: &'a ShellRenderState<'_>,
+    endpoint_id: &ClientEndpointId,
+) -> Option<&'a HashSet<String>> {
+    if endpoint_id.is_local() {
+        Some(state.pinned_workspaces)
+    } else {
+        state.remote_pinned_workspaces.get(endpoint_id)
+    }
+}
+
 pub(super) fn render_collapsed(
     buffer: &mut Buffer,
     area: Rect,
@@ -489,6 +500,10 @@ pub(super) fn render_expanded(
                             .add_modifier(Modifier::DIM),
                     );
                 }
+                let pinned = !entry.indented
+                    && pinned_workspaces_for_endpoint(state, &endpoint.endpoint_id)
+                        .is_some_and(|pinned| pinned.contains(&workspace.workspace_id));
+                super::sidebar::render_pinned_marker(buffer, rect, pinned, palette);
                 let group_toggle = super::sidebar::render_parent_group_toggle(
                     buffer,
                     rect,

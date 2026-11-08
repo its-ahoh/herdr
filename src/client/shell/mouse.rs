@@ -584,7 +584,7 @@ impl ClientShellState {
             .map(|(_, target)| target)
     }
 
-    fn workspace_move_method(
+    pub(super) fn workspace_move_method(
         &self,
         source_workspace_id: &str,
         before_workspace_id: Option<&str>,
@@ -1298,6 +1298,10 @@ impl ClientShellState {
                         target,
                     } => {
                         if let Some((before_workspace_id, _)) = target {
+                            let before_workspace_id = self.clamp_workspace_drop_target(
+                                &source_workspace_id,
+                                before_workspace_id,
+                            );
                             if let Some(method) = self.workspace_move_method(
                                 &source_workspace_id,
                                 before_workspace_id.as_deref(),

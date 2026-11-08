@@ -334,6 +334,12 @@ pub(crate) fn render_sidebar(
             dragged,
             palette,
         );
+        render_pinned_marker(
+            buffer,
+            rect,
+            !entry.indented && state.pinned_workspaces.contains(&workspace.workspace_id),
+            palette,
+        );
         let group_toggle = render_parent_group_toggle(
             buffer,
             rect,
@@ -628,6 +634,28 @@ pub(in crate::client::shell) fn render_parent_group_toggle(
         Style::default().fg(palette.accent),
     );
     Some((toggle, key))
+}
+
+/// Marker drawn on pinned root workspaces, just left of the group toggle column.
+pub(in crate::client::shell) const PINNED_WORKSPACE_MARKER: &str = "⚑";
+
+pub(in crate::client::shell) fn render_pinned_marker(
+    buffer: &mut Buffer,
+    workspace_rect: Rect,
+    pinned: bool,
+    palette: &Palette,
+) {
+    if !pinned || workspace_rect.width < 3 {
+        return;
+    }
+    put_text(
+        buffer,
+        workspace_rect.right().saturating_sub(2),
+        workspace_rect.y,
+        1,
+        PINNED_WORKSPACE_MARKER,
+        Style::default().fg(palette.yellow),
+    );
 }
 
 pub(in crate::client::shell) fn displayed_workspace_status(

@@ -5,20 +5,36 @@ impl ClientContextMenuOverlay {
         use ClientContextMenuAction as Action;
 
         let item = |label, action| ClientContextMenuItem { label, action };
+        let pin = |pinned: bool| {
+            item(
+                if pinned { "Unpin" } else { "Pin to top" },
+                Action::TogglePin,
+            )
+        };
         match &self.target {
-            ClientContextMenuTarget::Workspace { is_git: false, .. } => {
-                vec![item("Rename", Action::Rename), item("Close", Action::Close)]
-            }
             ClientContextMenuTarget::Workspace {
-                is_linked_worktree: false,
-                has_worktree_children: false,
+                is_git: false,
+                pinned,
                 ..
             } => vec![
                 item("Rename", Action::Rename),
+                pin(*pinned),
+                item("Close", Action::Close),
+            ],
+            ClientContextMenuTarget::Workspace {
+                is_linked_worktree: false,
+                has_worktree_children: false,
+                pinned,
+                ..
+            } => vec![
+                item("Rename", Action::Rename),
+                pin(*pinned),
                 item("Close", Action::Close),
                 item("New worktree", Action::NewWorktree),
                 item("Open worktree...", Action::OpenWorktree),
             ],
+            // Linked worktrees always sit under their parent workspace, so they
+            // follow the parent's pin state instead of being pinned on their own.
             ClientContextMenuTarget::Workspace {
                 is_linked_worktree: true,
                 ..
@@ -31,9 +47,11 @@ impl ClientContextMenuOverlay {
                 has_worktree_children: true,
                 close_group,
                 collapsed,
+                pinned,
                 ..
             } => vec![
                 item("Rename", Action::Rename),
+                pin(*pinned),
                 item(
                     if *close_group { "Close group" } else { "Close" },
                     Action::Close,
@@ -108,6 +126,7 @@ impl ClientShellState {
         let collapsed = worktree.is_some_and(|worktree| {
             self.group_is_collapsed(&self.active_endpoint_id, &worktree.key)
         });
+        let pinned = self.workspace_is_pinned(&self.active_endpoint_id, &workspace_id);
         self.overlay = Some(ClientShellOverlay::ContextMenu(ClientContextMenuOverlay {
             target: ClientContextMenuTarget::Workspace {
                 workspace_id,
@@ -116,6 +135,7 @@ impl ClientShellState {
                 has_worktree_children,
                 close_group,
                 collapsed,
+                pinned,
             },
             x,
             y,
@@ -275,6 +295,7 @@ impl ClientShellState {
                     self.persist_chrome_preferences(outcome);
                 }
             }
+            ClientContextMenuAction::TogglePin => self.toggle_workspace_pin(workspace_id, outcome),
             _ => {}
         }
     }
