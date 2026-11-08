@@ -35,6 +35,29 @@ fn moved_workspace(outcome: &ClientShellInput) -> Option<(String, usize)> {
     }
 }
 
+fn workspace_row<'a>(
+    state: &'a ClientShellState,
+    endpoint_id: &ClientEndpointId,
+    workspace_id: &str,
+) -> &'a WorkspaceHit {
+    state
+        .hits
+        .workspaces
+        .iter()
+        .find(|hit| &hit.endpoint_id == endpoint_id && hit.workspace_id == workspace_id)
+        .expect("workspace hit")
+}
+
+fn workspace_marker(
+    buffer: &Buffer,
+    state: &ClientShellState,
+    endpoint_id: &ClientEndpointId,
+    workspace_id: &str,
+) -> String {
+    let rect = workspace_row(state, endpoint_id, workspace_id).rect;
+    buffer[(rect.right() - 2, rect.y)].symbol().to_owned()
+}
+
 #[test]
 fn pin_and_unpin_preserve_the_pinned_block_order() {
     let mut state = state_with_workspaces(&["ws_1", "ws_2", "ws_3"]);
@@ -196,4 +219,107 @@ fn two_clients_with_different_pins_stop_after_one_round() {
     let mut outcome = ClientShellInput::default();
     state.toggle_workspace_pin("w1".into(), &mut outcome);
     assert!(!outcome.actions.is_empty());
+}
+
+#[test]
+fn pinned_workspace_row_shows_a_pin_marker() {
+    let mut state = state_with_workspaces(&["ws_1", "ws_2"]);
+    state.set_pane_surface(surface());
+    state.pinned_workspaces.insert("ws_1".into());
+    let frame = state.compose(106, 20).expect("composed frame");
+    let buffer = frame.to_ratatui_buffer().expect("sidebar buffer");
+
+    assert_eq!(
+        workspace_marker(&buffer, &state, &ClientEndpointId::Local, "ws_1"),
+        crate::client::shell::sidebar::PINNED_WORKSPACE_MARKER
+    );
+    assert_ne!(
+        workspace_marker(&buffer, &state, &ClientEndpointId::Local, "ws_2"),
+        crate::client::shell::sidebar::PINNED_WORKSPACE_MARKER
+    );
+}
+
+#[test]
+fn narrow_long_worktree_group_keeps_marker_left_of_fold_arrow() {
+    let mut projected = snapshot_with_workspaces(&["parent", "child"]);
+    projected.workspaces[0].label = "a-very-long-workspace-name-that-must-be-clipped".into();
+    projected.workspaces[0].worktree = Some(ClientShellWorktree {
+        key: "repo".into(),
+        label: "repo".into(),
+        is_linked_worktree: false,
+    });
+    projected.workspaces[1].worktree = Some(ClientShellWorktree {
+        key: "repo".into(),
+        label: "repo".into(),
+        is_linked_worktree: true,
+    });
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    state.sidebar_width = state.config.sidebar_min_width;
+    state.set_snapshot(Box::new(projected));
+    state.set_pane_surface(surface());
+    state.pinned_workspaces = HashSet::from(["parent".into(), "child".into()]);
+
+    let frame = state.compose(106, 20).expect("narrow sidebar frame");
+    let buffer = frame.to_ratatui_buffer().expect("sidebar buffer");
+    let parent = workspace_row(&state, &ClientEndpointId::Local, "parent");
+    let (toggle, _) = parent.group_toggle.as_ref().expect("worktree fold arrow");
+    assert_eq!(
+        buffer[(parent.rect.right() - 2, parent.rect.y)].symbol(),
+        crate::client::shell::sidebar::PINNED_WORKSPACE_MARKER
+    );
+    assert_eq!(toggle.x, parent.rect.right() - 1);
+    assert_eq!(buffer[(toggle.x, toggle.y)].symbol(), "▾");
+    assert_ne!(
+        workspace_marker(&buffer, &state, &ClientEndpointId::Local, "child"),
+        crate::client::shell::sidebar::PINNED_WORKSPACE_MARKER
+    );
+}
+
+#[test]
+fn remote_pinned_workspace_row_shows_a_pin_marker() {
+    let mut state = state_with_workspaces(&["local"]);
+    state.set_pane_surface(surface());
+    let profile =
+        crate::client::endpoint::SavedSshEndpoint::new("Remote", "dev@example.invalid", "test")
+            .expect("remote profile");
+    let remote_id = ClientEndpointId::Ssh(profile.id.clone());
+    state.set_endpoint_catalog(&[profile]);
+    state.set_endpoint_status(
+        &remote_id,
+        crate::client::endpoint::ClientEndpointStatus::Online,
+    );
+    let mut remote = snapshot_with_workspaces(&["remote"]);
+    remote.boot_id = "remote-boot".into();
+    state.set_endpoint_snapshot(&remote_id, Box::new(remote));
+    state
+        .remote_pinned_workspaces
+        .insert(remote_id.clone(), HashSet::from(["remote".into()]));
+
+    let frame = state.compose(106, 20).expect("remote sidebar frame");
+    let buffer = frame.to_ratatui_buffer().expect("sidebar buffer");
+    assert_eq!(
+        workspace_marker(&buffer, &state, &remote_id, "remote"),
+        crate::client::shell::sidebar::PINNED_WORKSPACE_MARKER
+    );
+}
+
+#[test]
+fn unpin_removes_the_marker_before_the_move_snapshot_arrives() {
+    let mut state = state_with_workspaces(&["ws_1", "ws_2"]);
+    state.set_pane_surface(surface());
+    state.pinned_workspaces.insert("ws_1".into());
+    let pinned = state.compose(106, 20).expect("pinned frame");
+    let pinned = pinned.to_ratatui_buffer().expect("pinned buffer");
+    assert_eq!(
+        workspace_marker(&pinned, &state, &ClientEndpointId::Local, "ws_1"),
+        crate::client::shell::sidebar::PINNED_WORKSPACE_MARKER
+    );
+
+    state.toggle_workspace_pin("ws_1".into(), &mut ClientShellInput::default());
+    let unpinned = state.compose(106, 20).expect("unpinned frame");
+    let unpinned = unpinned.to_ratatui_buffer().expect("unpinned buffer");
+    assert_ne!(
+        workspace_marker(&unpinned, &state, &ClientEndpointId::Local, "ws_1"),
+        crate::client::shell::sidebar::PINNED_WORKSPACE_MARKER
+    );
 }
